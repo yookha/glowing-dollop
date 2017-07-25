@@ -1,0 +1,79 @@
+#include <HamsterAPIClientCPP/Hamster.h>
+#include <unistd.h>
+#include <vector>
+
+#include "/opt/hamster/HamsterRosInstall/include/HamsterAPICommon/Common/HamsterError.h"
+#include "/opt/hamster/HamsterRosInstall/include/HamsterAPICommon/Common/Log.h"
+#include "/opt/hamster/HamsterRosInstall/include/HamsterAPICommon/Messages/OccupancyGrid.h"
+#include "/opt/hamster/HamsterRosInstall/include/HamsterAPICommon/Messages/Pose.h"
+#include "ConfigurationManager.h"
+#include "LocalizationManager.h"
+#include "Map.h"
+#include "Robot.h"
+#include "PathPlanner.h"
+#include "Constants.h"
+
+using namespace std;
+using namespace HamsterAPI;
+
+HamsterAPI::Hamster * hamster;
+
+int main()
+{
+	try
+	{
+		ConfigurationManager config;
+
+		Location startPoint = config.getStartPoint();
+		Location endPoint = config.getEndPoint();
+		RobotSize robotSize = config.getRobotSize();
+		double resultion = config.getResulution();
+
+		hamster = new HamsterAPI::Hamster(1);
+
+		sleep(2);
+
+		OccupancyGrid ogrid = hamster->getSLAMMap();
+
+		Robot robot(hamster);
+
+		Map map(ogrid);
+
+		PathPlanner * pathPlanner;
+
+		// Inflating the map according to the robot's relevant radius (maximal among it's height and width)
+		map.inflateMap(MAX(robotSize.height, robotSize.width));
+
+		vector<vector<Node*> > inflatedMapNodes = pathPlanner->getNodeMap(map.inflatedMap);
+
+		Node * startPosition = inflatedMapNodes.at(startPoint.x).at(startPoint.y);
+
+		Node * goalPosition = inflatedMapNodes.at(endPoint.x).at(endPoint.y);
+
+		// marking the shortest path on the map nodes, using the A* algorithm
+		pathPlanner->findShortestPath(inflatedMapNodes, startPosition, goalPosition);
+
+		std::list<Node* > waypoints = pathPlanner->markWaypoints(startPosition, goalPosition);
+
+		struct robotState startPositionState;
+		startPositionState.x = startPoint.x;
+		startPositionState.y = startPoint.y;
+		startPositionState.yaw = MAP_OFFSET;
+
+//		Pose *startPose = new Pose(1.317985, 1.380303, 0.739881);
+//		hamster->setInitialPose(*startPose);
+
+		// keep on moving the robot, handling the localization and printing the planned path
+		// as long as the hamster is connected
+		robot.move(startPositionState, waypoints, goalPosition, map);
+	}
+
+	catch (const HamsterAPI::HamsterError & connection_error)
+	{
+		HamsterAPI::Log::i("Client", connection_error.what());
+	}
+	delete hamster;
+	return 0;
+}
+
+

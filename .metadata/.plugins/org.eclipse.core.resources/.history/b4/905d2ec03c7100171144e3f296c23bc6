@@ -1,0 +1,369 @@
+#include "LocalizationManager.h"
+#include <iostream>
+#include <algorithm>
+
+using namespace std;
+
+LocalizationManager::LocalizationManager(OccupancyGrid *ogrid,
+		Hamster *hamster) {
+	this->hamster = hamster;
+	this->ogrid = ogrid;
+}
+
+void LocalizationManager::setRandomParticalesOnMap() {
+	particles.resize(NUM_OF_PARTICALES);
+	for (size_t i = 0; i < particles.size(); i++) {
+		particles[i] = new Particle();
+
+		createRandomParticle(particles[i]);
+	}
+}
+
+void LocalizationManager::createRandomParticle(Particle *particle) {
+	//Randomizing an angle
+	particle->yaw = rand() % 360;
+
+	particle->col = rand() % ogrid->getWidth();
+	particle->row = rand() % ogrid->getHeight();
+
+	// Randomizing the particle's location on the map as long as the cell is not free
+	while (ogrid->getCell(particle->row, particle->col) != CELL_FREE) {
+		particle->col = rand() % ogrid->getWidth();
+		particle->row = rand() % ogrid->getHeight();
+	}
+
+	//Conversion
+	particle->x = (particle->col - (double) ogrid->getWidth() / 2) * ogrid->getResolution();
+	particle->y = ((double) ogrid->getHeight() / 2 - particle->row) * ogrid->getResolution();
+
+}
+double LocalizationManager::randNumberFactor(int level) {
+	if (level == 3)
+		return 0.4 - 0.8 * (double) rand() / (double) RAND_MAX;
+	else if (level == 2)
+		return 0.2 - 0.4 * (double) rand() / (double) RAND_MAX;
+	else
+		return 0.1 - 0.2 * (double) rand() / (double) RAND_MAX;
+}
+
+double LocalizationManager::randNumberFactorYaw(int level) {
+	if (level == 5)
+		return 180 - rand() % 360;
+	else if (level == 4)
+		return 90 - rand() % 180;
+	else if (level == 3)
+		return 30 - rand() % 60;
+	else if (level == 2)
+		return 10 - rand() % 20;
+	else
+		return 5 - rand() % 10;
+
+}
+
+void LocalizationManager::createNeighborParticales(Particle *previousParticle, Particle *newParticle)
+{
+	while (ogrid->getCell(previousParticle->row, previousParticle->col) != CELL_FREE)
+	{
+		if (newParticle->belief < 0.3)
+		{
+			previousParticle->x = newParticle->x + randNumberFactor(3);
+			previousParticle->y = newParticle->y + randNumberFactor(3);
+		}
+		else if (newParticle->belief < 0.6)
+		{
+			previousParticle->x = newParticle->x + randNumberFactor(2);
+			previousParticle->y = newParticle->y + randNumberFactor(2);
+		}
+		else
+		{
+			previousParticle->x = newParticle->x + randNumberFactor(1);
+			previousParticle->y = newParticle->y + randNumberFactor(1);
+		}
+
+		previousParticle->row = (double) ogrid->getHeight() / 2 - previousParticle->y / ogrid->getResolution();
+		previousParticle->col = previousParticle->x / ogrid->getResolution() + ogrid->getWidth() / 2;
+	}
+
+	if (newParticle->belief < 0.2)
+	{
+		previousParticle->yaw = (newParticle->yaw + (randNumberFactorYaw(5)));
+	}
+	else if (newParticle->belief < 0.4)
+	{
+		previousParticle->yaw = (newParticle->yaw + (randNumberFactorYaw(4)));
+	}
+	else if (newParticle->belief < 0.6)
+	{
+		previousParticle->yaw = (newParticle->yaw + (randNumberFactorYaw(3)));
+	}
+	else if (newParticle->belief < 0.8)
+	{
+		previousParticle->yaw = (newParticle->yaw + (randNumberFactorYaw(2)));
+	}
+	else
+	{
+		previousParticle->yaw = (newParticle->yaw + (randNumberFactorYaw(1)));
+	}
+
+	if (previousParticle->yaw >= 360)
+	{
+		previousParticle->yaw -= 360;
+	}
+
+	else if (previousParticle->yaw < 0)
+	{
+		previousParticle->yaw += 360;
+	}
+}
+
+
+double LocalizationManager::updateBelief(Particle *p) {
+	LidarScan scan = hamster->getLidarScan();
+
+	int hits = 0;
+	int misses = 0;
+
+	for (unsigned int i = 0; i < scan.getScanSize(); i++) {
+		double angle = scan.getScanAngleIncrement() * i * DEG2RAD;
+
+		float obstacleDistance = scan.getDistance(i);
+		if (obstacleDistance < scan.getMaxRange() - 0.001) {
+
+			double wallX = p->x + obstacleDistance * cos(angle + p->yaw * DEG2RAD - 180 * DEG2RAD);
+
+			double wallY = p->y + obstacleDistance * sin(angle + p->yaw * DEG2RAD - 180 * DEG2RAD);
+
+			int row = (double) ogrid->getHeight() / 2
+					- wallY / ogrid->getResolution();
+
+			int col = wallX / ogrid->getResolution() + ogrid->getWidth() / 2;
+
+			if (ogrid->getCell(row, col) == CELL_OCCUPIED) {
+				hits++;
+			} else {
+				misses++;
+			}
+		}
+	}
+
+	return (double) hits / (hits + misses);
+}
+
+bool compareParticals(Particle* x, Particle* y) {
+	return x->belief < y->belief;
+}
+
+bool LocalizationManager::returnBackOutOfRangeParticle(Particle *p) {
+	Particle * copiedParticle = new Particle(*p);
+
+	int distance;
+
+	int count = 0;
+
+	while (ogrid->getCell(p->row, p->col) != CELL_FREE && count < TRY_TO_BACK)
+	{
+		distance = 14 - rand() % 28;
+		p->col = copiedParticle->col + distance;
+		distance = 14 - rand() % 28;
+		p->row = copiedParticle->row + distance;
+
+		count++;
+	}
+
+	p->x = (p->col - (double) ogrid->getWidth() / 2) * ogrid->getResolution();
+	p->y = ((double) ogrid->getHeight() / 2 - p->row) * ogrid->getResolution();
+
+	delete copiedParticle;
+
+	return count < TRY_TO_BACK;
+}
+
+void LocalizationManager::moveParticales(double deltaX, double deltaY, double deltaYaw) {
+	int size = particles.size();
+
+	for (size_t i = 0; i < particles.size(); i++)
+	{
+		Particle *p = particles[i];
+
+		double deltaDistance = sqrt(pow(deltaX, 2) + pow(deltaY,2));
+
+		p->x += deltaDistance * cos(p->yaw * DEG2RAD);
+		p->y += deltaDistance * sin(p->yaw * DEG2RAD);
+
+		p->yaw += deltaYaw;
+
+		if (p->yaw >= 360){
+			p->yaw -= 360;
+		}
+
+		else if (p->yaw < 0){
+			p->yaw += 360;
+		}
+
+		p->row = (double) ogrid->getHeight() / 2 - p->y / ogrid->getResolution();
+		p->col = p->x / ogrid->getResolution() + ogrid->getWidth() / 2;
+
+		bool inserted = false;
+
+		if (ogrid->getCell(p->row, p->col) != CELL_FREE)
+		{
+			int indexFromTop = size - rand() % TOP_PARTICALES - 1;
+
+			if (p->belief > 0.3) {
+				inserted = returnBackOutOfRangeParticle(p);
+			}
+
+			if (!inserted) {
+				if (particles[indexFromTop]->belief > 0.4)
+				{
+					createNeighborParticales(p, particles[indexFromTop]);
+				}
+				else
+				{
+					createRandomParticle(p);
+				}
+			}
+		}
+		p->belief = updateBelief(p);
+	}
+	std::sort(particles.begin(), particles.end(), compareParticals);
+	for (int i = 1; i <= BAD_PARTICALES; i++) {
+		if (particles[size - i]->belief > 0.3) {
+			createNeighborParticales(particles[i - 1], particles[size - i]);
+		} else {
+			createRandomParticle(particles[i - 1]);
+		}
+		updateBelief(particles[i - 1]);
+	}
+
+}
+
+void LocalizationManager::printParticles() {
+	for (unsigned int i = 0; i < particles.size(); i++) {
+
+		cout << "Particle's Number " << i << ": " << endl;
+		cout << "x : " << particles[i]->x << endl;
+		cout << "y : " << particles[i]->y << endl;
+		cout << "heading angle : " << particles[i]->yaw << endl;
+		cout << "belief : " << particles[i]->belief << endl << endl << endl;
+	}
+}
+
+vector<Particle *> LocalizationManager::getParticles() const {
+	return particles;
+}
+
+void LocalizationManager::resampleParticles() {
+//	int count = 0;
+//	for (int k = 0; k < particles.size(); k++) {
+//		if (ogrid.getCell(particles[k]->j, particles[k]->i) != CELL_FREE) {
+////			particles[k]->belief = 0;
+//			count++;
+//		}
+//	}
+	SortParticles();
+	double sum;
+	for (int i = 0; i < particles.size(); i++) {
+				sum += particles[i]->belief;
+			}
+	double avg= sum/NUM_OF_PARTICALES*1.6;
+	int RemoveSize = particles.size() * 0.4;
+//	cout<<"A "<<particles.size()*0.35*(1-avg)<<endl;
+	int totalScore = 0;
+	double BetterPartAVG=0;
+
+		for (int i = RemoveSize; i < particles.size(); i++) {
+			totalScore += (particles[i]->belief) * 1000000;
+			BetterPartAVG += (particles[i]->belief);
+		}
+
+		//cout<<avg<<endl;
+
+	//cout<<particles[PARTICLES_NUM - 1]->belief<<endl;
+	//if (particles[PARTICLES_NUM - 1]->belief < 0.19) {
+//		if(particles.size()*0.05*(1-avg)>4){
+////	if (avg<0.1) {
+//		initParticles();
+//		return;
+//	}
+//	if (RemoveSize < count) {
+//		RemoveSize = count;
+	//}
+//	for (int i = 0; i < particles.size()*0.1; i++) {
+//	for (int i = 0; i < particles.size()*0.05*(1-avg); i++) {
+
+
+		double f = MIN(RemoveSize*pow(1-avg,2),RemoveSize*0.7);
+		BetterPartAVG=BetterPartAVG/(particles.size()-RemoveSize);
+	//	double f = MIN(pow(particles.size() * 0.35,(1-avg)*2),RemoveSize*0.85);
+
+		if(BetterPartAVG<0.2){
+		for (int i = 0; i < f; i++) {
+			if (particles[i]->belief<0.5)
+				createRandomParticle(particles[i]);
+			else GenerateNearTopParticle(particles[i]);
+	}
+		}
+		cout<<"AVG : "<<avg<<endl;
+	cout<<"B "<<f<<endl;
+	cout<<"RealPartAVG "<<BetterPartAVG<<" Best one "<< particles[PARTICLES_NUM-1]->belief<<endl;
+	/* These will need to be populated at the outset */
+	//int scores[particles.size() - RemoveSize];
+
+	if(particles[NUM_OF_PARTICALES-1]->belief>0.4){
+	for (int j = f; j < RemoveSize; j++) {
+		int r = rand() % totalScore;
+		int t = 0;
+		for (int i = RemoveSize; i < particles.size();++i) {
+			t += (particles[i]->belief) * 1000000;
+			if (r < t) {
+				GenerateNearParticle(particles[j], particles[i]);
+			}
+		}
+
+	}
+	}
+
+
+}
+
+void LocalizationManager::SortParticles()
+{
+int pos_min,temp;
+for (int i=0; i < particles.size(); i++)
+{
+    pos_min = i;
+	for (int j=i+1; j < particles.size(); j++)
+	{
+	if (particles[j]->belief < particles[pos_min]->belief)
+               pos_min=j;
+	}
+        if (pos_min != i)
+        {
+        	Particle *temp = particles[i];
+        	particles[i] = particles[pos_min];
+        	particles[pos_min] = temp;
+        }
+}
+}
+
+void LocalizationManager::GenerateNearTopParticle(Particle *targetParticle){
+	do {
+	targetParticle->row = (rand() % 5)+(particles[NUM_OF_PARTICALES-1]->row-2);
+	targetParticle->col = (rand() % 5)+(particles[NUM_OF_PARTICALES-1]->col-2);
+
+	} while (ogrid.getCell(targetParticle->row, targetParticle->col) != CELL_FREE);
+
+	targetParticle->x = (targetParticle->row - (double)ogrid.getWidth() / 2) * ogrid.getResolution();
+	targetParticle->y = ((double)ogrid.getHeight() / 2 - targetParticle->col) * ogrid.getResolution();
+
+	//cout << "x: " << targetParticle->x << ", y: " << targetParticle->y << ", i: " << targetParticle->i << ", j: " << targetParticle->j << endl;
+	targetParticle->yaw = particles[NUM_OF_PARTICALES-1]->yaw + (rand() % 11)-5;
+
+}
+
+
+
+LocalizationManager::~LocalizationManager() {
+}
+

@@ -1,0 +1,4 @@
+start 470 470
+end 450 450
+size 20 20
+resulation 0.05

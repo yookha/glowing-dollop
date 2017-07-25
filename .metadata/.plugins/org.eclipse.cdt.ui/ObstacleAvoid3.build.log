@@ -1,0 +1,6 @@
+19:45:40 **** Incremental Build of configuration Debug for project ObstacleAvoid3 ****
+make all 
+make: Nothing to be done for `all'.
+
+19:45:40 Build Finished (took 116ms)
+

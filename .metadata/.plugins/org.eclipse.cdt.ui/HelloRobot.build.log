@@ -1,0 +1,20 @@
+09:49:20 **** Build of configuration Debug for project HelloRobot ****
+make all 
+Building file: ../Grid.cpp
+Invoking: Cross G++ Compiler
+g++ -I/usr/local/include/player-2.0 -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"Grid.d" -MT"Grid.o" -o "Grid.o" "../Grid.cpp"
+Finished building: ../Grid.cpp
+ 
+Building file: ../Localization.cpp
+Invoking: Cross G++ Compiler
+g++ -I/usr/local/include/player-2.0 -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"Localization.d" -MT"Localization.o" -o "Localization.o" "../Localization.cpp"
+In file included from ../Localization.h:16:0,
+                 from ../Localization.cpp:10:
+../Scan.h:15:36: fatal error: libplayerc++/playerc++.h: No such file or directory
+ #include <libplayerc++/playerc++.h>
+                                    ^
+compilation terminated.
+make: *** [Localization.o] Error 1
+
+09:49:21 Build Finished (took 533ms)
+

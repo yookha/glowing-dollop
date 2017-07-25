@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">&#x0A;<refactoring comment="Rename resource &apos;ObstacleAvoid3/src/Common.h&apos; to &apos;RobotStructs.h&apos;" description="Rename resource &apos;Common.h&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="src/Common.h" name="RobotStructs.h" stamp="1500027019115" updateReferences="true"/>&#x0A;<refactoring comment="Rename resource &apos;ObstacleAvoid3/config.txt&apos; to &apos;robotSettings.txt&apos;" description="Rename resource &apos;config.txt&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="config.txt" name="robotSettings.txt" stamp="1500027108313" updateReferences="true"/>
+</session>
