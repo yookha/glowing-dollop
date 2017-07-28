@@ -65,6 +65,8 @@ public:
 
 	void resampleParticles();
 
+	Particle * GetBestParticle();
+
 	//distructor
 	virtual ~LocalizationManager();
 };

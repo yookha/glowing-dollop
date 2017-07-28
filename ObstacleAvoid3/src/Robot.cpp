@@ -53,6 +53,16 @@ void Robot::move(robotState startPosition, std::list<Node*> waypoints,
 	// Getting the initialized position of the robot
 	struct robotState currentPosition = getRobotState(grid, startPosition);
 
+	Particle * best = locManager.GetBestParticle();
+
+//	currentPosition.x = best->x;
+//	currentPosition.y = best->y;
+	currentPosition.yaw = best->yaw;
+
+	map.inflateMap(20);
+	map.drawPath(goalPosition);
+	map.showMap();
+
 	for (std::list<Node*>::reverse_iterator iter = waypoints.rbegin(); iter != waypoints.rend(); ++iter)
 	{
 		Node* currWaypoint = *iter;
@@ -60,6 +70,13 @@ void Robot::move(robotState startPosition, std::list<Node*> waypoints,
 		while (sqrt(pow(currWaypoint->getX() - currentPosition.x, 2) + pow(currWaypoint->getY() - currentPosition.y, 2)) > WAYPOINT_RANGE) {
 			cout << "DISTANCE FROM WAYPOINT: " << sqrt(pow(currWaypoint->getX() - currentPosition.x, 2) + pow(currWaypoint->getY() - currentPosition.y, 2)) << endl;
 			currentPosition = getRobotState(grid, startPosition);
+
+			Particle * best = locManager.GetBestParticle();
+
+//			currentPosition.x = best->x;
+//			currentPosition.y = best->y;
+			currentPosition.yaw = best->yaw;
+
 
 			// Updating the robot position to recalculate the DeltaX and DeltaY for the localization logic
 			updateRobotPosition();
@@ -83,36 +100,48 @@ void Robot::move(robotState startPosition, std::list<Node*> waypoints,
 
 			double deltaAngle = requiredAngle - robotAngle;
 
-			if(deltaAngle < -180)
-			{
-				deltaAngle += 360;
-			}
-			else if(deltaAngle > 180)
-			{
-				deltaAngle -= 360;
-			}
+//			if(deltaAngle < -180)
+//			{
+//				deltaAngle += 360;
+//			}
+//			else if(deltaAngle > 180)
+//			{
+//				deltaAngle -= 360;
+//			}
 
-
-			if (checkWallAhead()) {//check if there an obstacle ahead
-						moveBackwards();
-					} else if (isFrontFree())//check if there is not an obstacle ahead
-						moveForward();
-					else {
-						stopMoving();
-						double r = (double) rand() / (double) RAND_MAX;
-						if (isLeftFree() && isRightFree()) {//check here where to turn
-							if (r < 0.4)
-								turnLeft();
-							else
-								turnRight();
-						} else if (isLeftFree()) {
-							turnLeft();
-						} else if (isRightFree()) {
-							turnRight();
-						} else {
-							turnAround();
-						}
+			if (!isFrontFree()) {//check if there an obstacle ahead
+				moveBackwards();
+			} else if (fabs(deltaAngle) < 1.05)//check if there is not an obstacle ahead
+				moveForward();
+			else {
+//						stopMoving();
+				if (robotAngle > requiredAngle)
+				{
+					if (360 - robotAngle + requiredAngle < robotAngle - requiredAngle)
+					{
+						turnLeft();
+//						wheelsAngle = leftTurnAngle();
 					}
+					else
+					{
+						turnRight();
+//						wheelsAngle = rightTurnAngle();
+					}
+				}
+				else
+				{
+					if (360 - requiredAngle + robotAngle < requiredAngle - robotAngle)
+					{
+//						wheelsAngle = rightTurnAngle();
+						turnRight();
+					}
+					else
+					{
+//						wheelsAngle = leftTurnAngle();
+						turnLeft();
+					}
+				}
+	}
 
 
 			// If the angle is small enough to start moving straight
@@ -133,9 +162,7 @@ void Robot::move(robotState startPosition, std::list<Node*> waypoints,
 			}*/
 
 			// Inflating the map, printing the shortest path and printing them all together
-			map.inflateMap(20);
-			map.drawPath(goalPosition);
-			map.showMap();
+
 
 			if(currWaypoint->getX() == goalPosition->getX() && currWaypoint->getY() == goalPosition->getY()){
 				break;
@@ -177,25 +204,16 @@ void Robot::turnAround()
 void Robot::turnRight()
 {
 	HamsterAPI::Log::i("Client", "The hamster is turning a full right turn");
-	while (!isFrontFree())
-	{
-		hamster->sendSpeed(0.3, -50.0);
-		if (checkWallAhead())
-			break;
-	}
-	stopMoving();
+
+
+	hamster->sendSpeed(0.2, -30.0);
 }
 
 void Robot::turnLeft()
 {
 	HamsterAPI::Log::i("Client", "The hamster is turning a full left  turn");
-	while (!isFrontFree())
-	{
-		hamster->sendSpeed(0.3, 50.0);
-		if (checkWallAhead())
-			break;
-	}
-	stopMoving();
+
+	hamster->sendSpeed(0.2, 30.0);
 }
 
 bool Robot::isBackFree()
@@ -277,7 +295,8 @@ bool Robot::checkWallAhead()
 	int count = 0;
 	std::vector<double> distances;
 	getScansBetween(170, 190, distances);//scan the distance from obstacle ahead between Degrees : [170,190]
-	for (size_t i = 0; i <= distances.size(); i++)
+	cout << "Something infront of me " << distances[9] << "m away";
+	for (size_t i = 0; i < distances.size(); i++)
 	{
 		if (distances[i] < 0.35)//the distance from the wall ahead
 			count++;
@@ -286,7 +305,6 @@ bool Robot::checkWallAhead()
 		return false;
 	else
 		HamsterAPI::Log::i("Client", "Close obstacle is in front of me");
-		moveBackwards();
 	return true;
 }
 
@@ -309,11 +327,24 @@ struct robotState Robot::getRobotState(OccupancyGrid ogrid, robotState startPosi
 
 	cout << "X: " << currentPose.getX() << " Y: " << currentPose.getY() << " Grid Width:  " << ogrid.getWidth() << "Grid Res: "  << ogrid.getResolution() << " Grid Heig: " << ogrid.getHeight() << endl;
 
+	double x = currentPose.getX();
+	double y = currentPose.getY();
+
 	currentState.x = (currentPose.getX() - (startPosition.x - ((double)ogrid.getWidth() / 2))) *10;
 	currentState.y = (currentPose.getY() - (startPosition.y - ((double)ogrid.getHeight() / 2))) *10;
 	currentState.yaw = currentPose.getHeading();
 
 	cout << "We are at X: " << currentState.x << " Y: " << currentState.y << "yaw: " << currentState.yaw << endl;
+
+	if (currentState.yaw < 0)
+	{
+		currentState.yaw += 360;
+	}
+	else if (currentState.yaw > 360)
+	{
+		currentState.yaw -= 360;
+	}
+
 
 	return currentState;
 }

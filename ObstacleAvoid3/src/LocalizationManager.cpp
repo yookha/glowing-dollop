@@ -376,7 +376,9 @@ targetParticle->y = ((double)ogrid->getHeight() / 2 - targetParticle->col) * ogr
 targetParticle->yaw = sourceParticle->yaw + (rand() % 31)-15;
 }
 
-
+Particle * LocalizationManager::GetBestParticle() {
+	return *(std::max_element(particles.begin(), particles.end(), compareParticals));
+}
 
 
 LocalizationManager::~LocalizationManager() {
